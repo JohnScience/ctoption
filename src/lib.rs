@@ -11,22 +11,17 @@ pub type CTSome<T> = CTOption<T, IS_SOME>;
 
 pub type CTNone<T> = CTOption<T, IS_NONE>;
 
-union CTOptionVariantUnion<T> {
-    pub md_ctsome: ManuallyDrop<CTSome<T>>,
-    pub md_ctnone: ManuallyDrop<CTNone<T>>,
-}
-
-union CTSomeUnion<T> {
-    pub md_ctsome: ManuallyDrop<CTSome<T>>,
-    pub md_inner: ManuallyDrop<T>,
-}
-
 impl<T> CTSome<T> {
     pub const fn new(val: T) -> Self {
         Self(MaybeUninit::new(val))
     }
 
     pub const fn into_inner(self) -> T {
+        union CTSomeUnion<T> {
+            md_ctsome: ManuallyDrop<CTSome<T>>,
+            md_inner: ManuallyDrop<T>,
+        }
+
         let md_ctsome = ManuallyDrop::new(self);
 
         let u = CTSomeUnion { md_ctsome };
@@ -42,6 +37,11 @@ impl<T> CTNone<T> {
     }
 
     pub const fn insert(mut self, val: T) -> CTSome<T> {
+        union CTOptionVariantUnion<T> {
+            md_ctsome: ManuallyDrop<CTSome<T>>,
+            md_ctnone: ManuallyDrop<CTNone<T>>,
+        }
+
         self.0 = MaybeUninit::new(val);
         let md_ctnone = ManuallyDrop::new(self);
         let u = CTOptionVariantUnion { md_ctnone };

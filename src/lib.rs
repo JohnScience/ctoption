@@ -9,7 +9,7 @@ pub mod prelude;
 /// environments where the size of types matters. However, its interface
 /// can be just as ergonomic as that of [`Option`].
 /// 
-/// One important application of this type is a [Type State] variation
+/// One important application of this type is a category of [Type State] variations
 /// of the [Builder Pattern]. One example implementation of this pattern
 /// will be provided after a few more beginner-friendly examples.
 /// 
@@ -48,7 +48,7 @@ pub mod prelude;
 /// };
 /// ```
 /// 
-/// or, equivalently,
+/// or, if slightly [unsugared],
 /// 
 /// ```
 /// use ctoption::prelude::*;
@@ -79,7 +79,7 @@ pub mod prelude;
 /// // };
 /// ```
 /// 
-/// or, equivalently,
+/// or, if unsugared similarly,
 /// 
 /// ```
 /// // const _: () = {
@@ -104,11 +104,54 @@ pub mod prelude;
 /// 
 /// ## Matching `CTOption` instances in generic code
 /// 
+/// It would be awesome if we could write something like this:
 /// 
+/// ```compile_fail
+/// const fn get_ty_alias_name<T, const IS_SOME_VAL: bool>(opt: &CTOption<T, IS_SOME_VAL>) -> &'static str {
+///     match opt {
+///         CTSome(x) => {
+///             "CTSome"
+///         }
+///         CTNone => {
+///             "CTNone"
+///         }
+///     }
+/// }
+/// ```
+/// 
+/// However, this code won't work because match expression doesn't allow to match the value against
+/// different types. If you try to do this, you'll get
+/// [`error[E0532]: expected tuple struct or tuple variant, found type alias CTSome.`][E0532]
+/// 
+/// Then what about matching against the value of `IS_SOME_VAL`? Let's say we want to write a cleanup function.
+/// 
+/// ```compile_fail
+/// const fn do_one_thing() {}
+/// const fn do_another_thing() {}
+/// 
+/// const fn extra_cleanup<T, const IS_SOME_VAL: bool>(opt: CTOption<T, IS_SOME_VAL>) {
+///     match IS_SOME_VAL {
+///         true => {
+///             do_one_thing()
+///         }
+///         false => {
+///             do_another_thing()
+///         }
+///     }
+/// }
+/// ```
+/// 
+/// Then you'll encounter another problem:
+/// [`error[E0493]: destructor of CTOption<T, IS_SOME_VAL> cannot be evaluated at compile-time`][E0493]. This
+/// happens because [`CTOption`] has a custom implementation of [`Drop`] trait and custom implementations
+/// cannot be evaluated at compile-time.
 /// 
 /// [Type State]: http://cliffle.com/blog/rust-typestate/
 /// [Builder Pattern]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [contravariant]: https://en.m.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science)
+/// [unsugared]: https://en.wikipedia.org/wiki/Syntactic_sugar
+/// [E0532]: https://doc.rust-lang.org/error_codes/E0532.html
+/// [E0493]: https://doc.rust-lang.org/error_codes/E0493.html
 #[repr(transparent)]
 pub struct CTOption<T, const IS_SOME_VAL: bool>(MaybeUninit<T>);
 
@@ -163,7 +206,33 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     pub const fn is_some(&self) -> bool {
         IS_SOME_VAL
     }
+
+    pub const unsafe fn assume_some(self) -> CTSome<T> {
+        union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
+            md_ctsome: ManuallyDrop<CTSome<U>>,
+            md_ctopt: ManuallyDrop<CTOption<U,NESTED_IS_SOME_VAL>>,
+        }
+
+        let md_ctopt = ManuallyDrop::new(self);
+        let u = CTOptionVariantUnion { md_ctopt };
+        let md_ctsome = unsafe { u.md_ctsome };
+        ManuallyDrop::into_inner(md_ctsome)
+    }
 }
+
+// const fn do_one_thing() {}
+// const fn do_another_thing() {}
+
+// const fn extra_cleanup<T, const IS_SOME_VAL: bool>(opt: CTOption<T, IS_SOME_VAL>) {
+//     match IS_SOME_VAL {
+//         true => {
+//             do_one_thing()
+//         }
+//         false => {
+//             do_another_thing()
+//         }
+//     }
+// }
 
 impl<T, const IS_SOME_VAL: bool> Drop for CTOption<T, IS_SOME_VAL> {
     fn drop(&mut self) {

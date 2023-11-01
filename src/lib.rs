@@ -2,57 +2,57 @@ use core::mem::{ManuallyDrop, MaybeUninit};
 
 pub mod prelude;
 
-/// A compile-time alternative to [`Option`]. Unlike [`Option`], 
+/// A compile-time alternative to [`Option`]. Unlike [`Option`],
 /// this type is guaranteed to have the same size and alignmemt as `T`.
-/// 
+///
 /// This type is especially useful for software targetting memory-constrained
 /// environments where the size of types matters. However, its interface
 /// can be just as ergonomic as that of [`Option`].
-/// 
+///
 /// One important application of this type is a category of [Type State] variations
 /// of the [Builder Pattern]. One example implementation of this pattern
 /// will be provided after a few more beginner-friendly examples.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ## Create and get the inner value back
-/// 
+///
 /// ```
 /// use ctoption::prelude::*;
-/// 
+///
 /// // enforcing constant evaluation
 /// const _: () = {
 ///     let some = CTSome::new(42);
 ///     assert!(some.into_inner() == 42);
 /// };
 /// ```
-/// 
+///
 /// This crate offers a [`prelude`] module with the most essential items.
-/// 
+///
 /// One of these items is the [`CTSome`] type alias, which is a convenience
 /// type inspired by [`Some`] variant of the [`Option`] type.
-/// 
+///
 /// `CTSome::new` and `CTSome::into_inner` are the two inverse associated
 /// functions. One wraps a value in a `CTSome` instance, while the other
 /// turns the [`CTSome`] instance into the inner value.
-/// 
+///
 /// ## Create empty, insert the value, and get the value back
-/// 
+///
 /// ```
 /// use ctoption::prelude::*;
-/// 
+///
 /// const _: () = {
 ///     let none = CTNone::new();
 ///     let some = none.insert(42);
 ///     assert!(some.into_inner() == 42);
 /// };
 /// ```
-/// 
+///
 /// or, if slightly [unsugared],
-/// 
+///
 /// ```
 /// use ctoption::prelude::*;
-/// 
+///
 /// const _: () = {
 ///     let none: CTOption<i32,IS_NONE> = CTNone::<i32>::new();
 ///     let some: CTOption<i32,IS_SOME> = {
@@ -62,14 +62,14 @@ pub mod prelude;
 ///     assert!(some.into_inner() == 42);
 /// };
 /// ```
-/// 
+///
 /// Similarly to [`CTSome`], [`CTNone`] is a type alias inspired by an
 /// enum variant of [`Option`] type - [`None`].
-/// 
+///
 /// The fact that [`CTSome`] and [`CTNone`] are type aliases and not
 /// enum variants has deep impact on the API. Compare the code above
 /// to the nearly equivalent code using [`Option`] type:
-/// 
+///
 /// ```
 /// // unwrap is unstable in const context
 /// // const _: () = {
@@ -78,9 +78,9 @@ pub mod prelude;
 ///     assert!(enum_instance.unwrap() == 42);
 /// // };
 /// ```
-/// 
+///
 /// or, if unsugared similarly,
-/// 
+///
 /// ```
 /// // const _: () = {
 ///     let mut enum_instance: Option<i32> = None::<i32>;
@@ -88,8 +88,8 @@ pub mod prelude;
 ///     assert!(enum_instance.unwrap() == 42);
 /// // };
 /// ```
-/// 
-/// Unlike [`Some`] and [`None`] enum variants of [`Option`] type, [`CTSome`] 
+///
+/// Unlike [`Some`] and [`None`] enum variants of [`Option`] type, [`CTSome`]
 /// and [`CTNone`] correspond to (distinct) types themselves and do not
 /// share a common overarching [contravariant] type (except for `!`) for every
 /// parameterization. Therefore, turning an instance of one `CT*` type into an
@@ -97,15 +97,15 @@ pub mod prelude;
 /// reason why the `CTNone::insert` associated function accepts an owned value
 /// of [`CTNone`] and returns an owned value of [`CTSome`] - a mutable reference
 /// wouldn't suffice.
-/// 
+///
 /// However, both [`CTSome`] and [`CTNone`] are merely type aliases which allow
 /// to conveniently refer to different partial parametrizations of the same
 /// generic type - [`CTOption`].
-/// 
+///
 /// ## Matching `CTOption` instances in generic code
-/// 
+///
 /// It would be awesome if we could write something like this:
-/// 
+///
 /// ```compile_fail
 /// const fn get_ty_alias_name<T, const IS_SOME_VAL: bool>(opt: &CTOption<T, IS_SOME_VAL>) -> &'static str {
 ///     match opt {
@@ -118,17 +118,17 @@ pub mod prelude;
 ///     }
 /// }
 /// ```
-/// 
+///
 /// However, this code won't work because match expression doesn't allow to match the value against
 /// different types. If you try to do this, you'll get
 /// [`error[E0532]: expected tuple struct or tuple variant, found type alias CTSome.`][E0532]
-/// 
+///
 /// Then what about matching against the value of `IS_SOME_VAL`? Let's say we want to write a cleanup function.
-/// 
+///
 /// ```compile_fail
 /// const fn do_one_thing() {}
 /// const fn do_another_thing() {}
-/// 
+///
 /// const fn extra_cleanup<T, const IS_SOME_VAL: bool>(opt: CTOption<T, IS_SOME_VAL>) {
 ///     match IS_SOME_VAL {
 ///         true => {
@@ -140,12 +140,12 @@ pub mod prelude;
 ///     }
 /// }
 /// ```
-/// 
+///
 /// Then you'll encounter another problem:
 /// [`error[E0493]: destructor of CTOption<T, IS_SOME_VAL> cannot be evaluated at compile-time`][E0493]. This
 /// happens because [`CTOption`] has a custom implementation of [`Drop`] trait and custom implementations
 /// cannot be evaluated at compile-time.
-/// 
+///
 /// [Type State]: http://cliffle.com/blog/rust-typestate/
 /// [Builder Pattern]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [contravariant]: https://en.m.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science)
@@ -210,7 +210,7 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     pub const unsafe fn assume_some(self) -> CTSome<T> {
         union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
             md_ctsome: ManuallyDrop<CTSome<U>>,
-            md_ctopt: ManuallyDrop<CTOption<U,NESTED_IS_SOME_VAL>>,
+            md_ctopt: ManuallyDrop<CTOption<U, NESTED_IS_SOME_VAL>>,
         }
 
         let md_ctopt = ManuallyDrop::new(self);

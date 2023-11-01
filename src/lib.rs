@@ -1,3 +1,5 @@
+#![feature(const_trait_impl)]
+
 use core::mem::{ManuallyDrop, MaybeUninit};
 
 pub mod prelude;
@@ -146,6 +148,9 @@ pub mod prelude;
 /// happens because [`CTOption`] has a custom implementation of [`Drop`] trait and custom implementations
 /// cannot be evaluated at compile-time.
 ///
+/// In theory, this could eventually be solved by [`std::marker::Destruct`] trait, but it is not the case
+/// at the moment of writing this.
+///
 /// [Type State]: http://cliffle.com/blog/rust-typestate/
 /// [Builder Pattern]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [contravariant]: https://en.m.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science)
@@ -220,20 +225,22 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     }
 }
 
-// const fn do_one_thing() {}
-// const fn do_another_thing() {}
+// TODO: make this work
 
-// const fn extra_cleanup<T, const IS_SOME_VAL: bool>(opt: CTOption<T, IS_SOME_VAL>) {
-//     match IS_SOME_VAL {
-//         true => {
-//             do_one_thing()
-//         }
-//         false => {
-//             do_another_thing()
-//         }
-//     }
-// }
+const fn do_one_thing() {}
+const fn do_another_thing() {}
 
+const fn extra_cleanup<T, const IS_SOME_VAL: bool>(opt: CTOption<T, IS_SOME_VAL>)
+where
+    CTOption<T, IS_SOME_VAL>: ~const std::marker::Destruct,
+{
+    match IS_SOME_VAL {
+        true => do_one_thing(),
+        false => do_another_thing(),
+    }
+}
+
+// How exactly should this be droppable at compile-time?
 impl<T, const IS_SOME_VAL: bool> Drop for CTOption<T, IS_SOME_VAL> {
     fn drop(&mut self) {
         if IS_SOME_VAL {

@@ -1,4 +1,5 @@
 #![feature(const_trait_impl)]
+// #![feature(const_precise_live_drops)]
 
 use core::mem::{ManuallyDrop, MaybeUninit};
 
@@ -168,6 +169,15 @@ pub type CTSome<T> = CTOption<T, IS_SOME>;
 
 pub type CTNone<T> = CTOption<T, IS_NONE>;
 
+pub const fn const_drop<T: ~const std::marker::Destruct>(val: T) {
+    std::mem::forget(val);
+}
+
+pub trait ConstGeneric<T> {
+    const STORAGE: MaybeUninit<T>;
+    const IS_INIT: bool;
+}
+
 impl<T> CTSome<T> {
     pub const fn new(val: T) -> Self {
         Self(MaybeUninit::new(val))
@@ -185,6 +195,20 @@ impl<T> CTSome<T> {
 
         let md_inner = unsafe { u.md_inner };
         ManuallyDrop::into_inner(md_inner)
+    }
+
+    pub const unsafe fn assume_const_generic_val<const IS_SOME_VAL: bool>(
+        self,
+    ) -> CTOption<T, IS_SOME_VAL> {
+        union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
+            md_ctsome: ManuallyDrop<CTSome<U>>,
+            md_ctopt: ManuallyDrop<CTOption<U, NESTED_IS_SOME_VAL>>,
+        }
+
+        let md_ctsome = ManuallyDrop::new(self);
+        let u = CTOptionVariantUnion { md_ctsome };
+        let md_ctopt = unsafe { u.md_ctopt };
+        ManuallyDrop::into_inner(md_ctopt)
     }
 }
 
@@ -223,25 +247,22 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
         let md_ctsome = unsafe { u.md_ctsome };
         ManuallyDrop::into_inner(md_ctsome)
     }
-}
 
-// TODO: make this work
+    pub const unsafe fn assume_none(self) -> CTNone<T> {
+        union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
+            md_ctnone: ManuallyDrop<CTNone<U>>,
+            md_ctopt: ManuallyDrop<CTOption<U, NESTED_IS_SOME_VAL>>,
+        }
 
-const fn do_one_thing() {}
-const fn do_another_thing() {}
-
-const fn extra_cleanup<T, const IS_SOME_VAL: bool>(opt: CTOption<T, IS_SOME_VAL>)
-where
-    CTOption<T, IS_SOME_VAL>: ~const std::marker::Destruct,
-{
-    match IS_SOME_VAL {
-        true => do_one_thing(),
-        false => do_another_thing(),
+        let md_ctopt = ManuallyDrop::new(self);
+        let u = CTOptionVariantUnion { md_ctopt };
+        let md_ctnone = unsafe { u.md_ctnone };
+        ManuallyDrop::into_inner(md_ctnone)
     }
 }
 
 // How exactly should this be droppable at compile-time?
-impl<T, const IS_SOME_VAL: bool> Drop for CTOption<T, IS_SOME_VAL> {
+impl<T, const IS_SOME_VAL: bool> const Drop for CTOption<T, IS_SOME_VAL> {
     fn drop(&mut self) {
         if IS_SOME_VAL {
             unsafe { self.0.assume_init_drop() }
@@ -251,12 +272,21 @@ impl<T, const IS_SOME_VAL: bool> Drop for CTOption<T, IS_SOME_VAL> {
 
 #[cfg(test)]
 mod tests {
-    use crate::CTSome;
+    use crate::prelude::*;
 
     #[test]
-    fn into_inner_works() {
+    const fn into_inner_works() {
         let opt = CTSome::new(3);
         let v = opt.into_inner();
-        assert_eq!(v, 3);
+        if v != 3 {
+            panic!("v != 3");
+        }
+    }
+
+    #[test]
+    const fn test_insert() {
+        let none = CTNone::<i32>::new();
+        let some = none.insert(42);
+        assert!(some.into_inner() == 42);
     }
 }

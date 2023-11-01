@@ -1,7 +1,1 @@
-pub use crate::{
-    CTOption,
-    CTSome,
-    CTNone,
-    IS_SOME,
-    IS_NONE,
-};
+pub use crate::{const_drop, CTNone, CTOption, CTSome, IS_NONE, IS_SOME};

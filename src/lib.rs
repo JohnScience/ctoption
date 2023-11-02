@@ -1,5 +1,11 @@
-#![feature(const_trait_impl)]
-// #![feature(const_precise_live_drops)]
+#![no_std]
+#![cfg_attr(feature = "const_trait_impl", feature(const_trait_impl))]
+#![cfg_attr(feature = "core_intrinsics", feature(core_intrinsics))]
+#![cfg_attr(feature = "adt_const_params", feature(adt_const_params))]
+#![cfg_attr(
+    feature = "const_precise_live_drops",
+    feature(const_precise_live_drops)
+)]
 
 use core::mem::{ManuallyDrop, MaybeUninit};
 
@@ -149,7 +155,7 @@ pub mod prelude;
 /// happens because [`CTOption`] has a custom implementation of [`Drop`] trait and custom implementations
 /// cannot be evaluated at compile-time.
 ///
-/// In theory, this could eventually be solved by [`std::marker::Destruct`] trait, but it is not the case
+/// In theory, this could eventually be solved by [`core::marker::Destruct`] trait, but it is not the case
 /// at the moment of writing this.
 ///
 /// [Type State]: http://cliffle.com/blog/rust-typestate/
@@ -169,13 +175,54 @@ pub type CTSome<T> = CTOption<T, IS_SOME>;
 
 pub type CTNone<T> = CTOption<T, IS_NONE>;
 
-pub const fn const_drop<T: ~const std::marker::Destruct>(val: T) {
-    std::mem::forget(val);
+pub unsafe trait OptionalConstGeneric {
+    type Inner;
+    const IS_SOME_VAL: bool;
 }
 
-pub trait ConstGeneric<T> {
-    const STORAGE: MaybeUninit<T>;
-    const IS_INIT: bool;
+#[cfg(feature = "adt_const_params")]
+pub mod workarounds {
+    use core::marker::ConstParamTy;
+
+    #[derive(Eq, PartialEq)]
+    pub enum Option<T> {
+        Some(T),
+        None,
+    }
+
+    impl<T: ConstParamTy> ConstParamTy for Option<T> {}
+
+    impl<T> Option<T> {
+        #[cfg(feature = "const_precise_live_drops")]
+        pub const fn into_core(self) -> core::option::Option<T> {
+            match self {
+                Self::Some(x) => core::option::Option::Some(x),
+                Self::None => core::option::Option::None,
+            }
+        }
+    }
+}
+
+unsafe impl<T, const IS_SOME_VAL: bool> OptionalConstGeneric for CTOption<T, IS_SOME_VAL> {
+    type Inner = T;
+    const IS_SOME_VAL: bool = IS_SOME_VAL;
+}
+
+#[cfg(feature = "core_intrinsics")]
+pub mod opt_const_generic {
+    use super::{CTSome, OptionalConstGeneric};
+    use core::mem::MaybeUninit;
+
+    pub const fn to_option<T: OptionalConstGeneric>(opt: T) -> Option<T::Inner> {
+        let storage: MaybeUninit<T::Inner> = unsafe { core::intrinsics::transmute_unchecked(opt) };
+        match T::IS_SOME_VAL {
+            true => {
+                let opt = unsafe { CTSome::<T::Inner>::from_maybe_uninit(storage) };
+                Some(opt.into_inner())
+            }
+            false => None,
+        }
+    }
 }
 
 impl<T> CTSome<T> {
@@ -232,6 +279,10 @@ impl<T> CTNone<T> {
 }
 
 impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
+    pub const unsafe fn from_maybe_uninit(val: MaybeUninit<T>) -> Self {
+        Self(val)
+    }
+
     pub const fn is_some(&self) -> bool {
         IS_SOME_VAL
     }
@@ -261,14 +312,36 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     }
 }
 
-// How exactly should this be droppable at compile-time?
-impl<T, const IS_SOME_VAL: bool> const Drop for CTOption<T, IS_SOME_VAL> {
+#[cfg(not(feature = "const_trait_impl"))]
+impl<T, const IS_SOME_VAL: bool> Drop for CTOption<T, IS_SOME_VAL> {
     fn drop(&mut self) {
         if IS_SOME_VAL {
             unsafe { self.0.assume_init_drop() }
         }
     }
 }
+
+#[cfg(feature = "const_trait_impl")]
+macro_rules! provide_items_guarded_by_const_trait_impl {
+    () => {
+        // The items are in a macro because they use a new syntax, which is not
+        // a valid Rust syntax at the moment of writing this.
+        pub const fn const_drop<T: ~const core::marker::Destruct>(val: T) {
+            core::mem::forget(val);
+        }
+
+        impl<T, const IS_SOME_VAL: bool> const Drop for CTOption<T, IS_SOME_VAL> {
+            fn drop(&mut self) {
+                if IS_SOME_VAL {
+                    unsafe { self.0.assume_init_drop() }
+                }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "const_trait_impl")]
+provide_items_guarded_by_const_trait_impl!();
 
 #[cfg(test)]
 mod tests {

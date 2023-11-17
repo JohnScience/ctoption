@@ -1,3 +1,7 @@
+// The test can be ran with `cargo test --test builder`
+
+// the linst is used to disable the warning about incompleteness of generic_const_exprs feature
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
 mod builder {

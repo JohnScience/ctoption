@@ -8,12 +8,12 @@ edition = "2021"
 [dependencies]
 
 [features]
-default = [
-    "core_intrinsics",
-    "const_trait_impl",
-    "adt_const_params",
-    "const_precise_live_drops",
-]
+# default = [
+#     "core_intrinsics",
+#     "const_trait_impl",
+#     "adt_const_params",
+#     "const_precise_live_drops",
+# ]
 core_intrinsics = []
 const_trait_impl = []
 adt_const_params = []

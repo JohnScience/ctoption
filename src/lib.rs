@@ -1,7 +1,11 @@
 #![no_std]
 #![cfg_attr(feature = "const_trait_impl", feature(const_trait_impl))]
 #![cfg_attr(feature = "core_intrinsics", feature(core_intrinsics))]
-#![cfg_attr(feature = "adt_const_params", feature(adt_const_params))]
+#![cfg_attr(
+    feature = "adt_const_params",
+    allow(incomplete_features),
+    feature(adt_const_params)
+)]
 #![cfg_attr(
     feature = "const_precise_live_drops",
     feature(const_precise_live_drops)
@@ -171,9 +175,12 @@ pub const IS_SOME: bool = true;
 
 pub const IS_NONE: bool = false;
 
-pub type CTSome<T> = CTOption<T, IS_SOME>;
+// the literals are used in the constants due to the bug of rust-analyzer:
+// https://github.com/rust-lang/rust-analyzer/issues/15821
 
-pub type CTNone<T> = CTOption<T, IS_NONE>;
+pub type CTSome<T> = CTOption<T, true>;
+
+pub type CTNone<T> = CTOption<T, false>;
 
 pub unsafe trait OptionalConstGeneric {
     type Inner;

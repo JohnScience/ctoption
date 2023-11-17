@@ -1,4 +1,9 @@
-#![feature(adt_const_params)]
+// The test can be ran with `cargo test --test const_genericity --features=adt_const_params,const_precise_live_drops`
+
+#![cfg(all(feature = "adt_const_params", feature = "const_precise_live_drops"))]
+// this is used to disable the warning for adt_const_params feature
+#![allow(incomplete_features)]
+#![feature(adt_const_params, const_precise_live_drops)]
 
 use ctoption::workarounds::Option;
 

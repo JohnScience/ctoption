@@ -14,7 +14,7 @@
 use core::mem::{ManuallyDrop, MaybeUninit};
 
 /// A [`prelude`] for this crate, which is meant to be used as `use ctoption::prelude::*;`.
-/// 
+///
 /// [`prelude`]: https://doc.rust-lang.org/std/prelude/index.html#other-preludes
 pub mod prelude;
 
@@ -245,10 +245,13 @@ pub mod opt_const_generic {
 }
 
 impl<T> CTSome<T> {
+    /// Creates a new instance of [`CTSome`] from a value.
     pub const fn new(val: T) -> Self {
         Self(MaybeUninit::new(val))
     }
 
+    /// Turns the [`CTSome`] instance into the inner value.
+    #[doc(alias = "unwrap")]
     pub const fn into_inner(self) -> T {
         union CTSomeUnion<T> {
             md_ctsome: ManuallyDrop<CTSome<T>>,
@@ -263,6 +266,7 @@ impl<T> CTSome<T> {
         ManuallyDrop::into_inner(md_inner)
     }
 
+    #[doc(hidden)]
     pub const unsafe fn assume_const_generic_val<const IS_SOME_VAL: bool>(
         self,
     ) -> CTOption<T, IS_SOME_VAL> {
@@ -279,10 +283,15 @@ impl<T> CTSome<T> {
 }
 
 impl<T> CTNone<T> {
+    // It does not make sense to have a non-const constructor for CTNone.
+    #[allow(clippy::new_without_default)]
+    /// Creates a new instance of [`CTNone`].
     pub const fn new() -> Self {
         Self(MaybeUninit::uninit())
     }
 
+    /// Inserts a value into the storage of the [`CTNone`] instance
+    /// and returns it as a [`CTSome`] instance.
     pub const fn insert(mut self, val: T) -> CTSome<T> {
         union CTOptionVariantUnion<T> {
             md_ctsome: ManuallyDrop<CTSome<T>>,
@@ -298,14 +307,35 @@ impl<T> CTNone<T> {
 }
 
 impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
+    /// Creates a new instance of [`CTOption`] from a [`MaybeUninit`] storage.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the value is properly initialized if
+    /// `IS_SOME_VAL` is [`IS_SOME`].
     pub const unsafe fn from_maybe_uninit(val: MaybeUninit<T>) -> Self {
         Self(val)
     }
 
+    /// Checks if the instance is actually [`CTSome`], rather than [`CTNone`].
+    ///
+    /// **Note:** At the moment of writing, calling the function in a generic context
+    /// will **not** infer that
+    ///
+    /// 1. in the branch where [`is_some`](Self::is_some) returned `true`,
+    /// // the type is actually [`CTSome`],
+    /// 2. in the branch where [`is_some`](Self::is_some) returned `false`,
+    /// // the type is actually [`CTNone`].
     pub const fn is_some(&self) -> bool {
         IS_SOME_VAL
     }
 
+    /// Turns the [`CTOption`] instance into [`CTSome`] instance without
+    /// checking if the instance is a [`CTSome`].
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the underlying storage is properly initialized.
     pub const unsafe fn assume_some(self) -> CTSome<T> {
         union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
             md_ctsome: ManuallyDrop<CTSome<U>>,
@@ -318,6 +348,13 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
         ManuallyDrop::into_inner(md_ctsome)
     }
 
+    /// Turns the [`CTOption`] instance into [`CTNone`] instance without
+    /// running the destructor.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that, if the original value was [`CTSome`],
+    /// the destructor was run manually.
     pub const unsafe fn assume_none(self) -> CTNone<T> {
         union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
             md_ctnone: ManuallyDrop<CTNone<U>>,

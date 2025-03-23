@@ -13,6 +13,9 @@
 
 use core::mem::{ManuallyDrop, MaybeUninit};
 
+/// A [`prelude`] for this crate, which is meant to be used as `use ctoption::prelude::*;`.
+/// 
+/// [`prelude`]: https://doc.rust-lang.org/std/prelude/index.html#other-preludes
 pub mod prelude;
 
 /// A compile-time alternative to [`Option`]. Unlike [`Option`],
@@ -171,17 +174,28 @@ pub mod prelude;
 #[repr(transparent)]
 pub struct CTOption<T, const IS_SOME_VAL: bool>(MaybeUninit<T>);
 
+/// A convenience constant for `true`, which is used to indicate that
+/// the [`CTOption`] instance is a [`CTSome`].
 pub const IS_SOME: bool = true;
 
+/// A convenience constant for `false`, which is used to indicate that
+/// the [`CTOption`] instance is a [`CTNone`].
 pub const IS_NONE: bool = false;
 
 // the literals are used in the constants due to the bug of rust-analyzer:
 // https://github.com/rust-lang/rust-analyzer/issues/15821
 
+/// A convenience type alias for [`CTOption`] with `true` as the second
+/// type parameter. This type alias is inspired by the [`Some`] variant
+/// of the [`Option`] type.
 pub type CTSome<T> = CTOption<T, true>;
 
+/// A convenience type alias for [`CTOption`] with `false` as the second
+/// type parameter. This type alias is inspired by the [`None`] variant
+/// of the [`Option`] type.
 pub type CTNone<T> = CTOption<T, false>;
 
+#[doc(hidden)]
 pub unsafe trait OptionalConstGeneric {
     type Inner;
     const IS_SOME_VAL: bool;
@@ -191,13 +205,11 @@ pub unsafe trait OptionalConstGeneric {
 pub mod workarounds {
     use core::marker::ConstParamTy;
 
-    #[derive(Eq, PartialEq)]
+    #[derive(Eq, PartialEq, ConstParamTy)]
     pub enum Option<T> {
         Some(T),
         None,
     }
-
-    impl<T: ConstParamTy> ConstParamTy for Option<T> {}
 
     impl<T> Option<T> {
         #[cfg(feature = "const_precise_live_drops")]

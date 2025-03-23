@@ -13,8 +13,10 @@ edition = "2021"
 #     "const_trait_impl",
 #     "adt_const_params",
 #     "const_precise_live_drops",
+#     "generic_const_exprs",
 # ]
 core_intrinsics = []
 const_trait_impl = []
 adt_const_params = []
 const_precise_live_drops = []
+generic_const_exprs = []

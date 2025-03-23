@@ -1,4 +1,5 @@
-// The test can be ran with `cargo test --test builder`
+#![cfg(feature = "generic_const_exprs")]
+// The test can be ran with `cargo test --test builder -F generic_const_exprs`
 
 // the linst is used to disable the warning about incompleteness of generic_const_exprs feature
 #![allow(incomplete_features)]

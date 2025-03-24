@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 #![no_std]
 #![cfg_attr(feature = "const_trait_impl", feature(const_trait_impl))]
 #![cfg_attr(feature = "core_intrinsics", feature(core_intrinsics))]
@@ -165,6 +166,8 @@ pub mod prelude;
 /// In theory, this could eventually be solved by [`core::marker::Destruct`] trait, but it is not the case
 /// at the moment of writing this.
 ///
+/// **Workaround:** for the time being, you can use [`CTOption::assume_some`] and [`CTOption::assume_none`].
+///
 /// [Type State]: http://cliffle.com/blog/rust-typestate/
 /// [Builder Pattern]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [contravariant]: https://en.m.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science)
@@ -246,11 +249,32 @@ pub mod opt_const_generic {
 
 impl<T> CTSome<T> {
     /// Creates a new instance of [`CTSome`] from a value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const _: () = {
+    ///    let some = CTSome::new(42);
+    ///    assert!(some.into_inner() == 42);
+    /// };
+    /// ```
     pub const fn new(val: T) -> Self {
         Self(MaybeUninit::new(val))
     }
 
     /// Turns the [`CTSome`] instance into the inner value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const _: () = {
+    ///   let some = CTSome::new(42);
+    ///   assert!(some.into_inner() == 42);
+    /// };
     #[doc(alias = "unwrap")]
     pub const fn into_inner(self) -> T {
         union CTSomeUnion<T> {
@@ -266,7 +290,11 @@ impl<T> CTSome<T> {
         ManuallyDrop::into_inner(md_inner)
     }
 
-    #[doc(hidden)]
+    /// Assumes that the [`CTSome`] is an instance of [`CTOption`] with
+    /// the provided `IS_SOME_VAL`. This may be needed in generic code
+    /// where the [`CTSome`] instance was narrowed down from [`CTOption`]
+    /// instance but the type inference is not powerful enough to infer
+    /// that [`CTOption<T, IS_SOME_VAL>`] is the same as [`CTSome<T>`].
     pub const unsafe fn assume_const_generic_val<const IS_SOME_VAL: bool>(
         self,
     ) -> CTOption<T, IS_SOME_VAL> {
@@ -286,12 +314,35 @@ impl<T> CTNone<T> {
     // It does not make sense to have a non-const constructor for CTNone.
     #[allow(clippy::new_without_default)]
     /// Creates a new instance of [`CTNone`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const _: () = {
+    ///   let none = CTNone::<i32>::new();
+    ///   let some = none.insert(42);
+    ///   assert!(some.into_inner() == 42);
+    /// };
     pub const fn new() -> Self {
         Self(MaybeUninit::uninit())
     }
 
     /// Inserts a value into the storage of the [`CTNone`] instance
     /// and returns it as a [`CTSome`] instance.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const _: () = {
+    ///  let none = CTNone::<i32>::new();
+    ///  let some = none.insert(42);
+    ///  assert!(some.into_inner() == 42);
+    /// };
+    /// ```
     pub const fn insert(mut self, val: T) -> CTSome<T> {
         union CTOptionVariantUnion<T> {
             md_ctsome: ManuallyDrop<CTSome<T>>,
@@ -303,6 +354,32 @@ impl<T> CTNone<T> {
         let u = CTOptionVariantUnion { md_ctnone };
         let md_ctsome = unsafe { u.md_ctsome };
         ManuallyDrop::into_inner(md_ctsome)
+    }
+
+    /// Drops the [`CTNone`] instance without running the destructor.
+    ///
+    /// See [`core::mem::forget`] for more information.
+    pub const fn forget(self) {
+        core::mem::forget(self);
+    }
+
+    /// Assumes that the [`CTNone`] is an instance of [`CTOption`] with
+    /// the provided `IS_SOME_VAL`. This may be needed in generic code
+    /// where the [`CTNone`] instance was narrowed down from [`CTOption`]
+    /// instance but the type inference is not powerful enough to infer
+    /// that [`CTOption<T, IS_SOME_VAL>`] is the same as [`CTNone<T>`].
+    pub const unsafe fn assume_const_generic_val<const IS_SOME_VAL: bool>(
+        self,
+    ) -> CTOption<T, IS_SOME_VAL> {
+        union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
+            md_ctnone: ManuallyDrop<CTNone<U>>,
+            md_ctopt: ManuallyDrop<CTOption<U, NESTED_IS_SOME_VAL>>,
+        }
+
+        let md_ctnone = ManuallyDrop::new(self);
+        let u = CTOptionVariantUnion { md_ctnone };
+        let md_ctopt = unsafe { u.md_ctopt };
+        ManuallyDrop::into_inner(md_ctopt)
     }
 }
 
@@ -326,6 +403,19 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     /// // the type is actually [`CTSome`],
     /// 2. in the branch where [`is_some`](Self::is_some) returned `false`,
     /// // the type is actually [`CTNone`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const _: () = {
+    ///  let some = CTSome::new(42);
+    ///  assert!(some.is_some());
+    ///  // destructor of `CTOption<i32, true>` cannot be evaluated at compile-time
+    ///  // so we need to convert it into inner that can be evaluated at compile-time.
+    ///  let _ = some.into_inner();
+    /// };
     pub const fn is_some(&self) -> bool {
         IS_SOME_VAL
     }
@@ -336,6 +426,30 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     /// # Safety
     ///
     /// The caller must ensure that the underlying storage is properly initialized.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const fn add_inner_or_none<const IS_SOME_VAL: bool>(a: u32, b: CTOption<u32, IS_SOME_VAL>) -> u32 {
+    ///    if b.is_some() {
+    ///      let some: CTSome<u32> = unsafe { b.assume_some() };
+    ///      a + some.into_inner()
+    ///    } else {
+    ///      let none: CTNone<u32> = unsafe { b.assume_none() };
+    ///      none.forget();
+    ///      a
+    ///    }
+    /// }
+    ///
+    /// const _: () = {
+    ///   let some = CTSome::new(2);
+    ///   assert!(add_inner_or_none(2, some) == 4);
+    ///   let none = CTNone::<u32>::new();
+    ///   assert!(add_inner_or_none(2, none) == 2);
+    /// };
+    /// ```
     pub const unsafe fn assume_some(self) -> CTSome<T> {
         union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
             md_ctsome: ManuallyDrop<CTSome<U>>,
@@ -355,6 +469,29 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
     ///
     /// The caller must ensure that, if the original value was [`CTSome`],
     /// the destructor was run manually.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ctoption::prelude::*;
+    ///
+    /// const fn add_inner_or_none<const IS_SOME_VAL: bool>(a: u32, b: CTOption<u32, IS_SOME_VAL>) -> u32 {
+    ///   if b.is_some() {
+    ///     let some: CTSome<u32> = unsafe { b.assume_some() };
+    ///     a + some.into_inner()
+    ///   } else {
+    ///     let none: CTNone<u32> = unsafe { b.assume_none() };
+    ///     none.forget();
+    ///     a
+    ///   }
+    /// }
+    ///
+    /// const _: () = {
+    ///     let some = CTSome::new(2);
+    ///     assert!(add_inner_or_none(2, some) == 4);
+    ///     let none = CTNone::<u32>::new();
+    ///     assert!(add_inner_or_none(2, none) == 2);
+    /// };
     pub const unsafe fn assume_none(self) -> CTNone<T> {
         union CTOptionVariantUnion<U, const NESTED_IS_SOME_VAL: bool> {
             md_ctnone: ManuallyDrop<CTNone<U>>,
@@ -366,6 +503,24 @@ impl<T, const IS_SOME_VAL: bool> CTOption<T, IS_SOME_VAL> {
         let md_ctnone = unsafe { u.md_ctnone };
         ManuallyDrop::into_inner(md_ctnone)
     }
+
+    // const fn map<F,O>(self, f: F) -> CTOption<O, IS_SOME_VAL>
+    // where
+    //     F: FnOnce(T) -> O,
+    // {
+    //     if self.is_some() {
+    //         let some: CTSome<T> = unsafe { self.assume_some() };
+    //         let inner: T = some.into_inner();
+    //         let mapped_inner: O = f(inner);
+    //         let mapped_some: CTSome<O> = CTSome::new(mapped_inner);
+    //         unsafe { mapped_some.assume_const_generic_val() }
+    //     } else {
+    //         let none: CTNone<T> = unsafe { self.assume_none() };
+    //         none.forget();
+    //         let none: CTNone<O> = CTNone::new();
+    //         unsafe { none.assume_const_generic_val() }
+    //     }
+    // }
 }
 
 #[cfg(not(feature = "const_trait_impl"))]

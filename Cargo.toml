@@ -2,21 +2,26 @@
 name = "ctoption"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
+authors = ["Dmitrii Demenev <dmitrii@searchless.ca>"]
+description = "A compile-time option whose discriminant is elevated to compile time."
+documentation = "https://docs.rs/ctoption"
+readme = "README.md"
+keywords = [
+    "compilation",
+    "option",
+]
+categories = [
+    "data-structures",
+    "memory-management",
+    "no-std",
+    "no-std::no-alloc",
+]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/JohnScience/ctoption"
 
 [features]
-# default = [
-#     "core_intrinsics",
-#     "const_trait_impl",
-#     "adt_const_params",
-#     "const_precise_live_drops",
-#     "generic_const_exprs",
-# ]
-core_intrinsics = []
-const_trait_impl = []
 adt_const_params = []
 const_precise_live_drops = []
+const_trait_impl = []
+core_intrinsics = []
 generic_const_exprs = []
